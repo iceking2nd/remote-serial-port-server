@@ -57,6 +57,7 @@
         <el-form label-width="100px" class="config-form">
           <el-form-item label="字体">
             <el-select v-model="fontFamily" placeholder="请选择字体" @change="updateTerminalStyle">
+              <el-option label="JetBrains Mono" value="JetBrains Mono"></el-option>
               <el-option label="Monaco" value="Monaco"></el-option>
               <el-option label="Courier New" value="Courier New"></el-option>
               <el-option label="Consolas" value="Consolas"></el-option>
@@ -75,10 +76,11 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import axios from 'axios';
-import { Terminal } from 'xterm';
-import 'xterm/css/xterm.css';
+import { Terminal } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import { ElMessage } from 'element-plus';
 
 export default {
   setup() {
@@ -93,9 +95,9 @@ export default {
     const apiKey = ref('');
     let term;
     let socket;
-    const isConnected = ref(false); // 新增：用于跟踪 WebSocket 连接状态
-    const fontFamily = ref('Consolas'); // 新增：字体默认值
-    const fontSize = ref(12); // 新增：文字大小默认值
+    const isConnected = ref(false);
+    const fontFamily = ref('JetBrains Mono');
+    const fontSize = ref(12);
 
     const fetchApiKey = async () => {
       const response = await axios.get('/api/system/key');
@@ -115,7 +117,7 @@ export default {
 
     const connectWebSocket = () => {
       if (!form.value.port) {
-        alert('请选择端口');
+        ElMessage('请选择端口');
         return;
       }
 
@@ -124,15 +126,19 @@ export default {
 
       socket.onopen = () => {
         console.log('WebSocket connected');
-        isConnected.value = true; // 更新连接状态为已连接
-        term.onKey((key) => {
-          const char = key.key;
-          if (char === '\x7F') {
-            socket.send('\x08');
-          } else {
-            socket.send(char);
-          }
-        });
+        isConnected.value = true;
+
+        if (!term._keyListenerAttached) {
+          term.onKey((key) => {
+            const char = key.key;
+            if (char === '\x7F') {
+              socket.send('\x08');
+            } else {
+              socket.send(char);
+            }
+          });
+          term._keyListenerAttached = true;
+        }
       };
 
       socket.onmessage = (event) => {
@@ -141,14 +147,14 @@ export default {
 
       socket.onclose = () => {
         console.log('WebSocket disconnected');
-        isConnected.value = false; // 更新连接状态为断开
-        alert('WebSocket连接已断开，请检查网络或重新连接。');
+        isConnected.value = false;
+        ElMessage('WebSocket连接已断开，请检查网络或重新连接。');
       };
 
       socket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        isConnected.value = false; // 更新连接状态为断开
-        alert('WebSocket发生错误，请检查网络或重新连接。');
+        isConnected.value = false;
+        ElMessage('WebSocket发生错误，请检查网络或重新连接。', { type: 'error' });
       };
     };
 
@@ -156,14 +162,14 @@ export default {
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.close();
         console.log('WebSocket manually disconnected');
-        isConnected.value = false; // 更新连接状态为断开
+        isConnected.value = false;
       }
     };
 
     const handleFormChange = () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         disconnectWebSocket();
-        alert('表单参数已变更，WebSocket连接已断开。');
+        ElMessage('表单参数已变更，WebSocket连接已断开。');
       }
     };
 
@@ -174,21 +180,47 @@ export default {
       }
     };
 
+    const fitTerminalSize = () => {
+      if (term) {
+        const terminalContainer = document.getElementById('terminal');
+        const cols = Math.floor(terminalContainer.offsetWidth / term.options.fontSize);
+        const rows = Math.floor(terminalContainer.offsetHeight / term.options.fontSize);
+        term.resize(cols, rows);
+      }
+    };
+
     onMounted(async () => {
       await fetchApiKey();
       await fetchPorts();
 
       term = new Terminal({
-        fontFamily: fontFamily.value, // 初始化时应用字体
-        fontSize: fontSize.value, // 初始化时应用文字大小
+        fontFamily: fontFamily.value,
+        fontSize: fontSize.value,
       });
       term.open(document.getElementById('terminal'));
+
+      fitTerminalSize(); // 初始化时调整终端大小
     });
 
-    // 添加 onUnmounted 钩子以在页面关闭时断开 WebSocket 连接
     onUnmounted(() => {
       disconnectWebSocket();
+      term.offKey();
     });
+
+    // 监听窗口大小变化
+    watch(
+      () => window.innerWidth,
+      () => {
+        fitTerminalSize();
+      }
+    );
+
+    watch(
+      () => window.innerHeight,
+      () => {
+        fitTerminalSize();
+      }
+    );
 
     return {
       form,
@@ -196,20 +228,22 @@ export default {
       connectWebSocket,
       disconnectWebSocket,
       handleFormChange,
-      isConnected, // 返回新增的状态变量
-      fontFamily, // 返回新增的字体变量
-      fontSize, // 返回新增的文字大小变量
-      updateTerminalStyle, // 返回新增的方法
+      isConnected,
+      fontFamily,
+      fontSize,
+      updateTerminalStyle,
     };
   },
 };
 </script>
 
 <style>
+@import './assets/font/font.css';
+
 html, body {
   height: 100%;
   width: 100%;
-  margin: 0;
+  margin: 0; /* 确保没有默认的外边距 */
   display: flex; /* 使用 Flex 布局 */
   flex-direction: column;
 }
@@ -224,16 +258,9 @@ html, body {
 .terminal-container {
   display: flex;
   height: 100%;
+  width: 100%; /* 确保 el-container 宽度为 100% */
   flex-direction: column;
-  flex: 1; /* 允许终端容器根据内容自动扩展 */
-}
-
-.header {
-  background-color: #409EFF;
-  color: white;
-  text-align: center;
-  line-height: 60px;
-  flex-shrink: 0; /* 防止 header 被压缩 */
+  flex: 1; /* 允许终端容器根据父级容器扩展 */
 }
 
 .config-aside {
@@ -241,6 +268,7 @@ html, body {
   padding: 20px;
   box-sizing: border-box;
   flex-shrink: 0; /* 防止 config-aside 被压缩 */
+  width: 300px; /* 固定宽度 */
 }
 
 .terminal-main {
@@ -249,6 +277,15 @@ html, body {
   flex: 1; /* 终端主区域占据剩余空间 */
   padding: 0;
   margin: 0;
+  width: calc(100% - 300px); /* 动态计算宽度，确保与 aside 对齐 */
+}
+
+.header {
+  background-color: #409EFF;
+  color: white;
+  text-align: left;
+  line-height: 60px;
+  flex-shrink: 0; /* 防止 header 被压缩 */
 }
 
 .terminal {
