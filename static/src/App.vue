@@ -241,26 +241,20 @@ export default {
 @import './assets/font/font.css';
 
 html, body {
-  height: 100%;
-  width: 100%;
   margin: 0; /* 确保没有默认的外边距 */
   display: flex; /* 使用 Flex 布局 */
   flex-direction: column;
 }
 
-#app {
-  display: flex;
-  flex-direction: column;
-  height: 100%; /* 确保应用容器高度为 100% */
-  width: 100%; /* 确保应用容器宽度为 100% */
-}
-
 .terminal-container {
   display: flex;
-  height: 100%;
-  width: 100%; /* 确保 el-container 宽度为 100% */
   flex-direction: column;
   flex: 1; /* 允许终端容器根据父级容器扩展 */
+  width: 100vw;
+  height: 100vh; /* 确保容器占据整个视口高度 */
+  min-width: 1024px; /* 最小宽度 */
+  min-height: 768px; /* 最小高度 */
+  overflow: hidden;
 }
 
 .config-aside {
