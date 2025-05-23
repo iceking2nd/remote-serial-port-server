@@ -1,5 +1,5 @@
 <template>
-  <el-container class="terminal-container">
+  <el-container style="min-width: 1024px; min-height: 768px; width: 100vw; height: 100vh">
     <el-header class="header" height="60px">Remote Serial Port Server Terminal</el-header>
     <el-container>
       <el-aside width="300px" class="config-aside">
@@ -76,9 +76,10 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
 import axios from 'axios';
 import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { ElMessage } from 'element-plus';
 
@@ -95,21 +96,13 @@ export default {
     const apiKey = ref('');
     let socket;
     let term;
+    const fitAddon = new FitAddon();
     const isConnected = ref(false);
     const fontFamily = ref('JetBrains Mono');
     const fontSize = ref(12);
 
-    const windowWidth = ref(window.innerWidth);
-    const windowHeight = ref(window.innerHeight);
-    const updateWindowSize = () => {
-      setTimeout(() => {
-        windowWidth.value = window.innerWidth;
-        windowHeight.value = window.innerHeight;
-      } , 1000)
-    }
-
     const fetchApiKey = async () => {
-      const response = await axios.get('/api/system/key');
+      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/system/key`);
       apiKey.value = response.data.data.key;
       console.log('apiKey:', apiKey.value);
     };
@@ -119,7 +112,7 @@ export default {
         console.error('API Key is not available. Please ensure fetchApiKey is called first.');
         return;
       }
-      const response = await axios.get(`/api/port/?key=${apiKey.value}`);
+      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/port/?key=${apiKey.value}`);
       ports.value = response.data.data.ports;
       console.log('ports:', ports.value);
     };
@@ -130,7 +123,7 @@ export default {
         return;
       }
 
-      const wsUrl = `/api/port/open?key=${apiKey.value}&port=${form.value.port}&baudrate=${form.value.baudRate}&&stopbits=${form.value.stopBits}&parity=${form.value.parity}`;
+      const wsUrl = `${import.meta.env.VITE_API_BASE_URL}/api/port/open?key=${apiKey.value}&port=${form.value.port}&baudrate=${form.value.baudRate}&&stopbits=${form.value.stopBits}&parity=${form.value.parity}`;
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
@@ -183,25 +176,13 @@ export default {
     };
 
     const updateTerminalStyle = () => {
-      if (term) {
-        term.options.fontFamily = fontFamily.value;
-        term.options.fontSize = fontSize.value;
-      }
-    };
-
-    const fitTerminalSize = () => {
-      if (term) {
-        const termEle = document.getElementById('terminal-main');
-        const cols = Math.floor(termEle.offsetWidth / term.options.fontSize);
-        const rows = Math.floor(termEle.offsetHeight / term.options.fontSize);
-        term.resize(cols, rows);
-        console.log(`terminal element size changed to ${termEle.offsetWidth} x ${termEle.offsetHeight}`);
-        console.log(`resize terminal to ${rows} row(s) and ${cols} column(s)`);
-      }
+      term.options.fontFamily  = fontFamily.value;
+      term.options.fontSize = fontSize.value
+      term.refresh();
+      fitAddon.fit();
     };
 
     onMounted(async () => {
-      window.addEventListener('resize',updateWindowSize)
       await fetchApiKey();
       await fetchPorts();
 
@@ -211,29 +192,25 @@ export default {
         scrollback: 10000
       });
 
+      term.loadAddon(fitAddon)
       term.open(document.getElementById('terminal'));
+      fitAddon.fit()
 
       term.on('scroll', () => {
         console.log('Scroll position changed');
         // 可以在这里判断是否需要阻止滚动到底部
       });
-
-      fitTerminalSize(); // 初始化时调整终端大小
+      window.addEventListener('resize',fitAddon.fit);
     });
+
+    onBeforeUnmount(() => {
+      window.removeEventListener('resize',fitAddon.fit);
+      term.dispose();
+    })
 
     onUnmounted(() => {
       disconnectWebSocket();
-      window.removeEventListener('resize', updateWindowSize);
     });
-
-    // 监听窗口大小变化
-    watch(
-      [ windowWidth, windowHeight ],
-      (newSize,oldSize) => {
-        console.log(`browser window size changed to ${newSize[0]}px x ${newSize[1]}px from ${oldSize[0]}px x ${oldSize[1]}px`);
-        fitTerminalSize();
-      }
-    );
 
     return {
       form,
@@ -244,7 +221,7 @@ export default {
       isConnected,
       fontFamily,
       fontSize,
-      updateTerminalStyle,
+      updateTerminalStyle
     };
   },
 };
@@ -252,13 +229,6 @@ export default {
 
 <style>
 @import './assets/font/font.css';
-
-.terminal-container {
-  max-width: 100vw;
-  max-height: 100vh;
-  min-width: 1024px;
-  min-height: 768px;
-}
 
 .config-aside {
   background-color: #f5f7fa;
