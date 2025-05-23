@@ -1,6 +1,6 @@
 <template>
   <el-container class="terminal-container">
-    <el-header class="header">Remote Serial Port Server Terminal</el-header>
+    <el-header class="header" height="60px">Remote Serial Port Server Terminal</el-header>
     <el-container>
       <el-aside width="300px" class="config-aside">
         <el-form :model="form" label-width="100px" class="config-form">
@@ -68,8 +68,8 @@
           </el-form-item>
         </el-form>
       </el-aside>
-      <el-main class="terminal-main">
-        <div id="terminal" class="terminal"></div>
+      <el-main class="terminal-main" id="terminal-main">
+        <div id="terminal" class="terminal" ref="terminal"></div>
       </el-main>
     </el-container>
   </el-container>
@@ -93,11 +93,20 @@ export default {
     });
     const ports = ref([]);
     const apiKey = ref('');
-    let term;
     let socket;
+    let term;
     const isConnected = ref(false);
     const fontFamily = ref('JetBrains Mono');
     const fontSize = ref(12);
+
+    const windowWidth = ref(window.innerWidth);
+    const windowHeight = ref(window.innerHeight);
+    const updateWindowSize = () => {
+      setTimeout(() => {
+        windowWidth.value = window.innerWidth;
+        windowHeight.value = window.innerHeight;
+      } , 1000)
+    }
 
     const fetchApiKey = async () => {
       const response = await axios.get('/api/system/key');
@@ -182,42 +191,46 @@ export default {
 
     const fitTerminalSize = () => {
       if (term) {
-        const terminalContainer = document.getElementById('terminal');
-        const cols = Math.floor(terminalContainer.offsetWidth / term.options.fontSize);
-        const rows = Math.floor(terminalContainer.offsetHeight / term.options.fontSize);
+        const termEle = document.getElementById('terminal-main');
+        const cols = Math.floor(termEle.offsetWidth / term.options.fontSize);
+        const rows = Math.floor(termEle.offsetHeight / term.options.fontSize);
         term.resize(cols, rows);
+        console.log(`terminal element size changed to ${termEle.offsetWidth} x ${termEle.offsetHeight}`);
+        console.log(`resize terminal to ${rows} row(s) and ${cols} column(s)`);
       }
     };
 
     onMounted(async () => {
+      window.addEventListener('resize',updateWindowSize)
       await fetchApiKey();
       await fetchPorts();
 
       term = new Terminal({
         fontFamily: fontFamily.value,
         fontSize: fontSize.value,
+        scrollback: 10000
       });
+
       term.open(document.getElementById('terminal'));
+
+      term.on('scroll', () => {
+        console.log('Scroll position changed');
+        // 可以在这里判断是否需要阻止滚动到底部
+      });
 
       fitTerminalSize(); // 初始化时调整终端大小
     });
 
     onUnmounted(() => {
       disconnectWebSocket();
-      term.offKey();
+      window.removeEventListener('resize', updateWindowSize);
     });
 
     // 监听窗口大小变化
     watch(
-      () => window.innerWidth,
-      () => {
-        fitTerminalSize();
-      }
-    );
-
-    watch(
-      () => window.innerHeight,
-      () => {
+      [ windowWidth, windowHeight ],
+      (newSize,oldSize) => {
+        console.log(`browser window size changed to ${newSize[0]}px x ${newSize[1]}px from ${oldSize[0]}px x ${oldSize[1]}px`);
         fitTerminalSize();
       }
     );
@@ -240,21 +253,11 @@ export default {
 <style>
 @import './assets/font/font.css';
 
-html, body {
-  margin: 0; /* 确保没有默认的外边距 */
-  display: flex; /* 使用 Flex 布局 */
-  flex-direction: column;
-}
-
 .terminal-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1; /* 允许终端容器根据父级容器扩展 */
-  width: 100vw;
-  height: 100vh; /* 确保容器占据整个视口高度 */
-  min-width: 1024px; /* 最小宽度 */
-  min-height: 768px; /* 最小高度 */
-  overflow: hidden;
+  max-width: 100vw;
+  max-height: 100vh;
+  min-width: 1024px;
+  min-height: 768px;
 }
 
 .config-aside {
@@ -266,12 +269,7 @@ html, body {
 }
 
 .terminal-main {
-  display: flex;
-  flex-direction: column;
-  flex: 1; /* 终端主区域占据剩余空间 */
   padding: 0;
-  margin: 0;
-  width: calc(100% - 300px); /* 动态计算宽度，确保与 aside 对齐 */
 }
 
 .header {
@@ -283,18 +281,16 @@ html, body {
 }
 
 .terminal {
-  flex: 1;
-  display: flex; /* 确保终端内容也使用 Flex 布局 */
+  width: 100%;
+  height: 100%;
 }
 
-/* 添加媒体查询以适应不同屏幕尺寸 */
-@media (max-width: 768px) {
-  .config-aside {
-    width: 100%; /* 在小屏幕上，配置面板占满整个宽度 */
-  }
+.terminal ::-webkit-scrollbar {
+  width: 12px;
+}
 
-  .terminal-main {
-    flex-direction: column; /* 在小屏幕上，终端主区域变为垂直布局 */
-  }
+.terminal ::-webkit-scrollbar-thumb {
+  background-color: darkgrey;
+  border-radius: 6px;
 }
 </style>
