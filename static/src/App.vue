@@ -186,8 +186,7 @@ export default {
       term = new Terminal({
         fontFamily: fontFamily.value,
         fontSize: fontSize.value,
-        scrollback: 10000,
-        logLevel: 'debug'
+        scrollback: 10000
       });
 
       term.loadAddon(fitAddon)
