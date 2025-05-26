@@ -80,7 +80,7 @@ import { ref, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
 import axios from 'axios';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { ElMessage } from 'element-plus';
 
 export default {
@@ -97,9 +97,14 @@ export default {
     let socket;
     let term;
     const fitAddon = new FitAddon();
+    const clipboardAddon = new ClipboardAddon();
     const isConnected = ref(false);
     const fontFamily = ref('JetBrains Mono');
     const fontSize = ref(12);
+
+    const CONTROL_CHAR_MAP = {
+      '\x7F': '\x08',  // DEL -> BS
+    };
 
     const fetchApiKey = async () => {
       const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/system/key`);
@@ -129,18 +134,10 @@ export default {
       socket.onopen = () => {
         console.log('WebSocket connected');
         isConnected.value = true;
-
-        if (!term._keyListenerAttached) {
-          term.onKey((key) => {
-            const char = key.key;
-            if (char === '\x7F') {
-              socket.send('\x08');
-            } else {
-              socket.send(char);
-            }
-          });
-          term._keyListenerAttached = true;
-        }
+        term.onData((data) => {
+          const processedData = data.replace(/[\x00-\x1F\x7F-\x9F]/g, m => CONTROL_CHAR_MAP[m] || m)
+          socket.send(processedData);
+        });
       };
 
       socket.onmessage = (event) => {
@@ -177,8 +174,8 @@ export default {
 
     const updateTerminalStyle = () => {
       term.options.fontFamily  = fontFamily.value;
-      term.options.fontSize = fontSize.value
-      term.refresh();
+      term.options.fontSize = fontSize.value;
+      term.refresh(0, term.rows - 1);
       fitAddon.fit();
     };
 
@@ -189,17 +186,15 @@ export default {
       term = new Terminal({
         fontFamily: fontFamily.value,
         fontSize: fontSize.value,
-        scrollback: 10000
+        scrollback: 10000,
+        logLevel: 'debug'
       });
 
       term.loadAddon(fitAddon)
+      term.loadAddon(clipboardAddon)
       term.open(document.getElementById('terminal'));
       fitAddon.fit()
 
-      term.on('scroll', () => {
-        console.log('Scroll position changed');
-        // 可以在这里判断是否需要阻止滚动到底部
-      });
       window.addEventListener('resize',fitAddon.fit);
     });
 
@@ -229,6 +224,7 @@ export default {
 
 <style>
 @import './assets/font/font.css';
+@import '@xterm/xterm/css/xterm.css';
 
 .config-aside {
   background-color: #f5f7fa;
