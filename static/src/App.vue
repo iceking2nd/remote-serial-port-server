@@ -1,70 +1,78 @@
 <template>
   <el-container style="min-width: 1024px; min-height: 768px; width: 100vw; height: 100vh">
-    <el-header class="header" height="60px">Remote Serial Port Server Terminal</el-header>
+    <el-header class="header" height="60px">
+      <div class="header-title">
+      Remote Serial Port Server Terminal
+      </div>
+      <el-select v-model="locale" class="language-select">
+        <el-option key="en-us" label="English" value="en-us"></el-option>
+        <el-option key="zh-cn" label="简体中文" value="zh-cn"></el-option>
+      </el-select>
+    </el-header>
     <el-container>
       <el-aside width="300px" class="config-aside">
         <el-form :model="form" label-width="100px" class="config-form">
-          <el-form-item label="端口名">
-            <el-select v-model="form.port" placeholder="请选择端口" @change="handleFormChange">
+          <el-form-item :label="$t('menu.serial.port')">
+            <el-select v-model="form.port" :placeholder="$t('menu.serial.placeholders.port')" @change="handleFormChange">
               <el-option v-for="port in ports" :key="port" :label="port" :value="port"></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="波特率">
-            <el-input v-model.number="form.baudRate" placeholder="请输入波特率" @input="handleFormChange"></el-input>
+          <el-form-item :label="$t('menu.serial.baudRate')">
+            <el-input v-model.number="form.baudRate" :placeholder="$t('menu.serial.placeholders.baudRate')" @input="handleFormChange"></el-input>
           </el-form-item>
-          <el-form-item label="数据位">
-            <el-select v-model="form.dataBits" placeholder="请选择数据位" @change="handleFormChange">
+          <el-form-item :label="$t('menu.serial.dataBits')">
+            <el-select v-model="form.dataBits" :placeholder="$t('menu.serial.placeholders.dataBits')" @change="handleFormChange">
               <el-option label="5" value="5"></el-option>
               <el-option label="6" value="6"></el-option>
               <el-option label="7" value="7"></el-option>
               <el-option label="8" value="8"></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="停止位">
-            <el-select v-model="form.stopBits" placeholder="请选择停止位" @change="handleFormChange">
+          <el-form-item :label="$t('menu.serial.stopBits')">
+            <el-select v-model="form.stopBits" :placeholder="$t('menu.serial.placeholders.stopBits')" @change="handleFormChange">
               <el-option label="1" value="1"></el-option>
               <el-option label="1.5" value="1.5"></el-option>
               <el-option label="2" value="2"></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="奇偶性">
-            <el-select v-model="form.parity" placeholder="请选择奇偶性" @change="handleFormChange">
-              <el-option label="无" value="none"></el-option>
-              <el-option label="奇校验" value="odd"></el-option>
-              <el-option label="偶校验" value="even"></el-option>
-              <el-option label="标记" value="mark"></el-option>
-              <el-option label="空" value="space"></el-option>
+          <el-form-item :label="$t('menu.serial.parity')">
+            <el-select v-model="form.parity" :placeholder="$t('menu.serial.placeholders.parity')" @change="handleFormChange">
+              <el-option :label="$t('menu.serial.options.parity.none')" value="none"></el-option>
+              <el-option :label="$t('menu.serial.options.parity.odd')" value="odd"></el-option>
+              <el-option :label="$t('menu.serial.options.parity.even')" value="even"></el-option>
+              <el-option :label="$t('menu.serial.options.parity.mark')" value="mark"></el-option>
+              <el-option :label="$t('menu.serial.options.parity.space')" value="space"></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item>
+          <el-form-item class="button-group" label-width="0">
             <el-button
               type="primary"
               @click="connectWebSocket"
               :disabled="isConnected"
             >
-              连接
+              {{ $t('menu.theme.buttons.connect') }}
             </el-button>
             <el-button
               type="danger"
               @click="disconnectWebSocket"
               :disabled="!isConnected"
             >
-              断开连接
+              {{ $t('menu.theme.buttons.disconnect') }}
             </el-button>
           </el-form-item>
         </el-form>
         <!-- 新增表单：字体和文字大小调整 -->
         <el-form label-width="100px" class="config-form">
-          <el-form-item label="字体">
-            <el-select v-model="fontFamily" placeholder="请选择字体" @change="updateTerminalStyle">
+          <el-form-item :label="$t('menu.theme.font')">
+            <el-select v-model="fontFamily" :placeholder="$t('menu.theme.placeholders.font')" @change="updateTerminalStyle">
               <el-option label="JetBrains Mono" value="JetBrains Mono"></el-option>
               <el-option label="Monaco" value="Monaco"></el-option>
               <el-option label="Courier New" value="Courier New"></el-option>
               <el-option label="Consolas" value="Consolas"></el-option>
             </el-select>
           </el-form-item>
-          <el-form-item label="文字大小">
-            <el-input-number v-model="fontSize" :min="10" :max="50" @change="updateTerminalStyle"></el-input-number>
+          <el-form-item :label="$t('menu.theme.fontSize')">
+            <el-input-number :placeholder="$t('menu.theme.placeholders.fontSize')" v-model="fontSize" :min="10" :max="50" @change="updateTerminalStyle"></el-input-number>
           </el-form-item>
         </el-form>
       </el-aside>
@@ -82,9 +90,12 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { ElMessage } from 'element-plus';
+import { useI18n } from 'vue-i18n'
 
 export default {
   setup() {
+    const { t, locale } = useI18n()
+
     const form = ref({
       port: '',
       baudRate: 9600,
@@ -109,22 +120,22 @@ export default {
     const fetchApiKey = async () => {
       const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/system/key`);
       apiKey.value = response.data.data.key;
-      console.log('apiKey:', apiKey.value);
+      console.debug('apiKey:', apiKey.value);
     };
 
     const fetchPorts = async () => {
       if (!apiKey.value) {
-        console.error('API Key is not available. Please ensure fetchApiKey is called first.');
+        console.error(t('log.api_key_not_available'));
         return;
       }
       const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/port/?key=${apiKey.value}`);
       ports.value = response.data.data.ports;
-      console.log('ports:', ports.value);
+      console.debug('ports:', ports.value);
     };
 
     const connectWebSocket = () => {
       if (!form.value.port) {
-        ElMessage('请选择端口');
+        ElMessage(t('message.no_port'));
         return;
       }
 
@@ -132,7 +143,7 @@ export default {
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        console.log('WebSocket connected');
+        console.log(t('log.websocket_connected'));
         isConnected.value = true;
         term.onData((data) => {
           const processedData = data.replace(/[\x00-\x1F\x7F-\x9F]/g, m => CONTROL_CHAR_MAP[m] || m)
@@ -145,22 +156,22 @@ export default {
       };
 
       socket.onclose = () => {
-        console.log('WebSocket disconnected');
+        console.log(t('log.websocket_disconnected'));
         isConnected.value = false;
-        ElMessage('WebSocket连接已断开，请检查网络或重新连接。');
+        ElMessage(t('message.websocket_disconnected'));
       };
 
       socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error(t('log.websocket_error'), error);
         isConnected.value = false;
-        ElMessage('WebSocket发生错误，请检查网络或重新连接。', { type: 'error' });
+        ElMessage(t('message.websocket_error'), { type: 'error' });
       };
     };
 
     const disconnectWebSocket = () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.close();
-        console.log('WebSocket manually disconnected');
+        console.log(t('log.websocket_manually_disconnect'));
         isConnected.value = false;
       }
     };
@@ -168,7 +179,7 @@ export default {
     const handleFormChange = () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         disconnectWebSocket();
-        ElMessage('表单参数已变更，WebSocket连接已断开。');
+        ElMessage(t('message.websocket_params_changed'));
       }
     };
 
@@ -215,7 +226,9 @@ export default {
       isConnected,
       fontFamily,
       fontSize,
-      updateTerminalStyle
+      updateTerminalStyle,
+      t,
+      locale
     };
   },
 };
@@ -240,9 +253,26 @@ export default {
 .header {
   background-color: #409EFF;
   color: white;
-  text-align: left;
-  line-height: 60px;
+  display: flex; /* 启用Flex布局 */
+  justify-content: space-between; /* 子元素水平分布 */
+  align-items: center; /* 子元素垂直居中 */
   flex-shrink: 0; /* 防止 header 被压缩 */
+  padding: 0 20px; /* 左右内边距 */
+}
+
+.header-title {
+  text-align: left;
+}
+
+.language-select {
+  width: 120px; /* 设置 el-select 的宽度 */
+}
+
+.button-group .el-form-item__content {
+  display: flex;
+  justify-content: center;
+  flex-wrap: nowrap; /* 禁止换行 */
+  gap: 5px; /* 按钮之间的间距 */
 }
 
 .terminal {
