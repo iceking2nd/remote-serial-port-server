@@ -107,6 +107,7 @@ export default {
     const apiKey = ref('');
     let socket;
     let term;
+    let termDatalistener;
     const fitAddon = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
     const isConnected = ref(false);
@@ -145,7 +146,10 @@ export default {
       socket.onopen = () => {
         console.log(t('log.websocket_connected'));
         isConnected.value = true;
-        term.onData((data) => {
+        if (termDatalistener) {
+          termDatalistener.dispose()
+        }
+        termDatalistener = term.onData((data) => {
           const processedData = data.replace(/[\x00-\x1F\x7F-\x9F]/g, m => CONTROL_CHAR_MAP[m] || m)
           socket.send(processedData);
         });
