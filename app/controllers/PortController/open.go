@@ -2,8 +2,10 @@ package PortController
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/iceking2nd/remote-serial-port-server/app/models"
+	"github.com/iceking2nd/remote-serial-port-server/app/services"
 	"github.com/iceking2nd/remote-serial-port-server/global"
 	"github.com/sirupsen/logrus"
 	"go.bug.st/serial"
@@ -81,34 +83,37 @@ func Open(c *gin.Context) {
 		InitialStatusBits: &serial.ModemOutputBits{rts, dtr},
 	}
 
-	serialPort, err := serial.Open(port, mode)
+	subscriberID := uuid.New().String()
+	subscriber := &services.Subscriber{
+		ID:   subscriberID,
+		Send: make(chan []byte, 64),
+	}
+
+	session, err := services.GetPortManager().OpenPort(port, mode, subscriber)
 	if err != nil {
 		models.NewResponse(models.RESPONSE_OPEN_SERIAL_PORT_ERROR, err.Error(), nil).ResponseJson(http.StatusOK, c)
 		return
 	}
-	defer serialPort.Close()
+	defer services.GetPortManager().RemoveSubscriber(port, subscriberID)
 
-	// 启动两个协程：一个用于读取串口数据，另一个用于接收 WebSocket 消息
+	// goroutine: forward serial port data from subscriber channel to WebSocket
 	go func() {
-		buf := make([]byte, 128)
-		for {
-			n, err := serialPort.Read(buf)
-			if err != nil {
-				log.WithError(err).Errorln("error reading from serial port")
+		for data := range subscriber.Send {
+			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				log.WithError(err).Debug("failed to write to WebSocket")
 				return
 			}
-			conn.WriteMessage(websocket.TextMessage, buf[:n])
 		}
 	}()
 
-	// 监听 WebSocket 消息并发送到串口
+	// main loop: read from WebSocket and write to serial port
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.WithError(err).Errorln("WebSocket read error")
+			log.WithError(err).Debugln("WebSocket read error")
 			break
 		}
-		_, err = serialPort.Write(msg)
+		_, err = session.Write(msg)
 		if err != nil {
 			log.WithError(err).Errorln("error writing to serial port")
 			break

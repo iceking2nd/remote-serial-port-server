@@ -1,1 +1,4 @@
 .idea
+*.local.md
+remote-serial-port-server
+*.log

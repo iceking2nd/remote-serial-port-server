@@ -1,5 +1,5 @@
 <template>
-  <el-container style="min-width: 1024px; min-height: 768px; width: 100vw; height: 100vh">
+  <el-container style="min-width: 1024px; min-height: 768px; width: 100vw; height: 100vh; overflow: hidden">
     <el-header class="header" height="60px">
       <div class="header-title">
       Remote Serial Port Server Terminal
@@ -7,6 +7,11 @@
       <el-select v-model="locale" class="language-select">
         <el-option key="en-us" label="English" value="en-us"></el-option>
         <el-option key="zh-cn" label="简体中文" value="zh-cn"></el-option>
+        <el-option key="zh-tw" label="繁體中文" value="zh-tw"></el-option>
+        <el-option key="fr-fr" label="Français" value="fr-fr"></el-option>
+        <el-option key="de-de" label="Deutsch" value="de-de"></el-option>
+        <el-option key="ru-ru" label="Русский" value="ru-ru"></el-option>
+        <el-option key="pl-pl" label="Polski" value="pl-pl"></el-option>
       </el-select>
     </el-header>
     <el-container>
@@ -84,7 +89,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
 import axios from 'axios';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -206,8 +211,16 @@ export default {
 
       term.loadAddon(fitAddon)
       term.loadAddon(clipboardAddon)
-      term.open(document.getElementById('terminal'));
+      const terminalEl = document.getElementById('terminal');
+      term.open(terminalEl);
+      await nextTick();
       fitAddon.fit()
+
+      terminalEl.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && (e.key === 'w' || e.key === 'a' || e.key === 'e')) {
+          e.preventDefault();
+        }
+      });
 
       window.addEventListener('resize',fitAddon.fit);
     });
@@ -246,12 +259,14 @@ export default {
   background-color: #f5f7fa;
   padding: 20px;
   box-sizing: border-box;
-  flex-shrink: 0; /* 防止 config-aside 被压缩 */
-  width: 300px; /* 固定宽度 */
+  flex-shrink: 0;
+  width: 300px;
+  overflow-y: auto;
 }
 
 .terminal-main {
   padding: 0;
+  overflow: auto;
 }
 
 .header {
